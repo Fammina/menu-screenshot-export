@@ -214,8 +214,7 @@ def take_menu_screenshot(locator, output_file):
 
     locator.screenshot(
         path=output_file,
-        type="jpeg",
-        quality=95
+        type="png"
     )
 
 # ============================================================
@@ -263,7 +262,7 @@ def compose_final_image(output_file, logo_tmp_file):
 
     final_img.paste(base, (SIDE_PADDING, TOP_SECTION_HEIGHT), base)
 
-    final_img.convert("RGB").save(output_file, "JPEG", quality=95)
+    final_img.save(output_file, "PNG")
 
     logger.info("Immagine finale creata.")
 
@@ -293,17 +292,13 @@ def upload_to_supabase():
         logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
         sys.exit(1)
 
-    if not supabase_url or not supabase_key:
-        logger.warning("SUPABASE_URL o SUPABASE_KEY non configurati, upload saltato.")
-        return False
-
     logger.info("Connessione a Supabase...")
     client = create_client(supabase_url, supabase_key)
 
-    files = glob.glob(os.path.join(TEMP_DIR, "*.jpg"))
+    files = glob.glob(os.path.join(TEMP_DIR, "*.png"))
 
     if not files:
-        logger.warning("Nessun file .jpg trovato in temp/ da uploadare.")
+        logger.warning("Nessun file .png trovato in temp/ da uploadare.")
         return False
 
     errors = 0
@@ -315,7 +310,7 @@ def upload_to_supabase():
                 client.storage.from_(SUPABASE_BUCKET).upload(
                     path=f"{os.path.splitext(filename)[0]}/{filename}",
                     file=f,
-                    file_options={"content-type": "image/jpeg", "upsert": "true"}
+                    file_options={"content-type": "image/png", "upsert": "true"}
                 )
             logger.info(f"Uploadato: {filename}")
         except Exception as e:
@@ -340,7 +335,7 @@ def process_menu(browser, menu):
 
     logger.info(f"Inizio elaborazione: {descrizione}")
 
-    output_file = os.path.join(TEMP_DIR, f"{menu_id}.jpg")
+    output_file = os.path.join(TEMP_DIR, f"{menu_id}.png")
     logo_tmp_file = os.path.join(TEMP_DIR, f"{menu_id}_logo_tmp.png")
 
     page = browser.new_page(viewport=VIEWPORT)
