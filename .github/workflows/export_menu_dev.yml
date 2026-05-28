@@ -52,5 +52,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL_DEV }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_DEV }}
           MENUS_FILE: config/menus_dev.csv
-          SUPABASE_BUCKET: menu-images
+          SUPABASE_BUCKET: menus
         run: python menu_export.py
