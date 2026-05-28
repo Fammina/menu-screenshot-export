@@ -87,6 +87,7 @@ def ensure_python_dependencies():
     required = {
         "playwright": "playwright",
         "PIL": "pillow",
+        "requests": "requests",
     }
 
     missing = []
@@ -282,40 +283,54 @@ def cleanup_logo_tmp(logo_tmp_file):
 # ============================================================
 
 def upload_to_supabase(completed):
-    from supabase import create_client
+    import requests
 
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
+    edge_fn_url  = f"{supabase_url}/functions/v1/upload-menu"
 
     if not supabase_url or not supabase_key:
         logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
         sys.exit(1)
 
-    logger.info("Connessione a Supabase...")
-    client = create_client(supabase_url, supabase_key)
-
     if not completed:
         logger.warning("Nessun file da uploadare.")
         return False
 
+    headers = {
+        "Authorization": f"Bearer {supabase_key}",
+    }
+
     errors = 0
 
-    for filepath, folder in completed:
+    for filepath, restaurant_id in completed:
         filename = os.path.basename(filepath)
         try:
             with open(filepath, "rb") as f:
-                client.storage.from_(SUPABASE_BUCKET).upload(
-                    path=f"{folder}/{filename}",
-                    file=f,
-                    file_options={"content-type": "image/png", "upsert": "true"}
+                response = requests.post(
+                    edge_fn_url,
+                    headers=headers,
+                    files={"file": (filename, f, "image/png")},
+                    data={
+                        "restaurantId": restaurant_id,
+                        "menuType": "daily",
+                    },
                 )
-            logger.info(f"Uploadato: {filename}")
+
+            body = response.json()
+
+            if response.ok and body.get("success"):
+                logger.info(f"Uploadato via Edge Function: {filename} → {body.get('publicUrl')}")
+            else:
+                logger.error(f"Edge Function ha risposto con errore per {filename}: {body.get('error')}")
+                errors += 1
+
         except Exception as e:
-            logger.error(f"Errore upload {filename}: {e}")
+            logger.error(f"Errore chiamata Edge Function per {filename}: {e}")
             errors += 1
 
     if errors == 0:
-        logger.info(f"Tutti i {len(completed)} file caricati su Supabase con successo.")
+        logger.info(f"Tutti i {len(completed)} file caricati con successo.")
         return True
     else:
         logger.error(f"Upload completato con {errors} errori su {len(completed)} file.")
