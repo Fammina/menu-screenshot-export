@@ -1,4 +1,4 @@
-name: Render Menu
+name: Render Menu - Prod
 
 on:
   workflow_dispatch:
