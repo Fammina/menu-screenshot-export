@@ -313,7 +313,7 @@ def upload_to_supabase():
         try:
             with open(filepath, "rb") as f:
                 client.storage.from_(SUPABASE_BUCKET).upload(
-                    path=f"/{filename}",
+                    path=f"{os.path.splitext(filename)[0]}/{filename}",
                     file=f,
                     file_options={"content-type": "image/jpeg", "upsert": "true"}
                 )
