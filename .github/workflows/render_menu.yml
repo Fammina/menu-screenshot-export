@@ -41,26 +41,7 @@ jobs:
         run: playwright install chromium --with-deps
 
       - name: Esegui script
-        run: python menu_export.py
-
-      - name: Upload su Supabase Storage
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          python - <<'EOF'
-          import os
-          from supabase import create_client
-
-          url = os.environ["SUPABASE_URL"]
-          key = os.environ["SUPABASE_KEY"]
-
-          client = create_client(url, key)
-
-          with open("output.jpg", "rb") as f:
-              client.storage.from_("menu-images").upload(
-                  path="output.jpg",
-                  file=f,
-                  file_options={"content-type": "image/jpeg", "upsert": "true"}
-              )
-          EOF
+        run: python menu_export.py

@@ -4,6 +4,8 @@ LeggiMenu Renderer - Professional Version
 
 FEATURES
 --------
+- Legge lista URL da menus.csv
+- Crea cartella temp ad ogni avvio
 - Render pagina con Playwright
 - Screenshot preciso della card menu
 - Bordi arrotondati + shadow
@@ -11,16 +13,19 @@ FEATURES
 - Header superiore elegante e robusto
 - Background uniforme
 - Padding laterali professionali
-- Cleanup automatico file temporanei
+- Cleanup automatico file temporanei e cartella temp
 
 PYTHON 3.11+
 """
 
 import sys
+import csv
 import subprocess
 import logging
 import time
 import os
+import shutil
+import glob
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from PIL import Image
@@ -29,10 +34,8 @@ from PIL import Image
 # CONFIG
 # ============================================================
 
-URL = "https://www.leggimenu.it/menu/79skddaj79s2/201374"
-
-OUTPUT_FILE = "output.jpg"
-LOGO_TMP_FILE = "logo_tmp.png"
+MENUS_FILE = "menus.csv"
+TEMP_DIR = "temp"
 
 TARGET_SELECTOR = 'div.card.card-style[id^="voce-"]'
 LOGO_SELECTOR = "a.header-logo"
@@ -86,7 +89,6 @@ def ensure_python_dependencies():
 
     if missing:
         logger.info(f"Installazione dipendenze mancanti: {missing}")
-
         subprocess.run(
             [sys.executable, "-m", "pip", "install", *missing],
             check=True
@@ -98,26 +100,63 @@ def ensure_python_dependencies():
 
 def ensure_playwright():
     logger.info("Verifica Playwright browser...")
-
     subprocess.run(
         [sys.executable, "-m", "playwright", "install"],
         check=True
     )
 
 # ============================================================
+# TEMP DIR
+# ============================================================
+
+def create_temp_dir():
+    if os.path.exists(TEMP_DIR):
+        shutil.rmtree(TEMP_DIR)
+        logger.info("Cartella temp precedente rimossa.")
+
+    os.makedirs(TEMP_DIR)
+    logger.info(f"Cartella temp creata: {TEMP_DIR}/")
+
+def cleanup_temp_dir():
+    if os.path.exists(TEMP_DIR):
+        shutil.rmtree(TEMP_DIR)
+        logger.info("Cartella temp eliminata.")
+
+# ============================================================
+# CSV
+# ============================================================
+
+def load_menus():
+    logger.info(f"Lettura {MENUS_FILE}...")
+
+    menus = []
+
+    with open(MENUS_FILE, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            menus.append({
+                "id": row["id"].strip(),
+                "url": row["url"].strip(),
+                "descrizione": row["descrizione"].strip(),
+            })
+
+    logger.info(f"Trovate {len(menus)} voci.")
+    return menus
+
+# ============================================================
 # PAGE
 # ============================================================
 
-def load_page(page):
-    logger.info("Caricamento pagina...")
+def load_page(page, url):
+    logger.info(f"Caricamento pagina: {url}")
 
-    page.goto(URL, wait_until="domcontentloaded")
+    page.goto(url, wait_until="domcontentloaded")
 
     page.wait_for_timeout(3000)
 
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
-    except:
+    except Exception:
         logger.warning("networkidle non raggiunto (ok per SPA)")
 
     logger.info("Pagina caricata.")
@@ -127,8 +166,6 @@ def load_page(page):
 # ============================================================
 
 def inject_style(page):
-    logger.info("Applico stile custom...")
-
     page.add_style_tag(content="""
         .card.card-style {
             border-radius: 18px !important;
@@ -150,29 +187,23 @@ def get_target(page):
     )
 
     locator = page.locator(TARGET_SELECTOR).first
-
-    locator.wait_for(
-        state="visible",
-        timeout=20000
-    )
+    locator.wait_for(state="visible", timeout=20000)
 
     logger.info("Card trovata.")
-
     return locator
 
 # ============================================================
 # MENU SCREENSHOT
 # ============================================================
 
-def take_menu_screenshot(locator):
+def take_menu_screenshot(locator, output_file):
     logger.info("Creo screenshot menu...")
 
     locator.scroll_into_view_if_needed()
-
     time.sleep(1.5)
 
     locator.screenshot(
-        path=OUTPUT_FILE,
+        path=output_file,
         type="jpeg",
         quality=95
     )
@@ -181,20 +212,15 @@ def take_menu_screenshot(locator):
 # LOGO SCREENSHOT
 # ============================================================
 
-def capture_logo(page):
+def capture_logo(page, logo_tmp_file):
     logger.info("Cattura logo...")
 
     try:
         logo = page.locator(LOGO_SELECTOR).first
-
         logo.wait_for(timeout=10000)
-
-        logo.screenshot(path=LOGO_TMP_FILE)
-
+        logo.screenshot(path=logo_tmp_file)
         logger.info("Logo catturato.")
-
         return True
-
     except Exception as e:
         logger.warning(f"Impossibile catturare logo: {e}")
         return False
@@ -203,148 +229,168 @@ def capture_logo(page):
 # FINAL COMPOSITION
 # ============================================================
 
-def compose_final_image():
+def compose_final_image(output_file, logo_tmp_file):
     logger.info("Composizione immagine finale...")
 
-    base = Image.open(OUTPUT_FILE).convert("RGBA")
+    base = Image.open(output_file).convert("RGBA")
 
-    logo_exists = os.path.exists(LOGO_TMP_FILE)
-
-    if logo_exists:
-        logo = Image.open(LOGO_TMP_FILE).convert("RGBA")
-    else:
-        logo = None
-
-    # --------------------------------------------------------
-    # Dimensioni finali
-    # --------------------------------------------------------
+    logo = None
+    if os.path.exists(logo_tmp_file):
+        logo = Image.open(logo_tmp_file).convert("RGBA")
 
     final_width = base.width + (SIDE_PADDING * 2)
+    final_height = base.height + TOP_SECTION_HEIGHT + BOTTOM_PADDING
 
-    final_height = (
-        base.height
-        + TOP_SECTION_HEIGHT
-        + BOTTOM_PADDING
-    )
-
-    final_img = Image.new(
-        "RGBA",
-        (final_width, final_height),
-        BACKGROUND_COLOR
-    )
-
-    # --------------------------------------------------------
-    # Inserimento logo
-    # --------------------------------------------------------
+    final_img = Image.new("RGBA", (final_width, final_height), BACKGROUND_COLOR)
 
     if logo:
-
         max_logo_width = int(final_width * LOGO_MAX_WIDTH_RATIO)
-
         ratio = logo.height / logo.width
-
-        logo = logo.resize(
-            (
-                max_logo_width,
-                int(max_logo_width * ratio)
-            )
-        )
-
+        logo = logo.resize((max_logo_width, int(max_logo_width * ratio)))
         logo_x = (final_width - logo.width) // 2
-
-        # centratura verticale nella top section
         logo_y = (TOP_SECTION_HEIGHT - logo.height) // 2
+        final_img.paste(logo, (logo_x, logo_y), logo)
 
-        final_img.paste(
-            logo,
-            (logo_x, logo_y),
-            logo
-        )
+    final_img.paste(base, (SIDE_PADDING, TOP_SECTION_HEIGHT), base)
 
-    # --------------------------------------------------------
-    # Inserimento menu
-    # --------------------------------------------------------
-
-    menu_x = SIDE_PADDING
-    menu_y = TOP_SECTION_HEIGHT
-
-    final_img.paste(
-        base,
-        (menu_x, menu_y),
-        base
-    )
-
-    # --------------------------------------------------------
-    # Save
-    # --------------------------------------------------------
-
-    final_img.convert("RGB").save(
-        OUTPUT_FILE,
-        "JPEG",
-        quality=95
-    )
+    final_img.convert("RGB").save(output_file, "JPEG", quality=95)
 
     logger.info("Immagine finale creata.")
 
 # ============================================================
-# CLEANUP
+# CLEANUP LOGO TMP
 # ============================================================
 
-def cleanup():
-    if os.path.exists(LOGO_TMP_FILE):
+def cleanup_logo_tmp(logo_tmp_file):
+    if os.path.exists(logo_tmp_file):
         try:
-            os.remove(LOGO_TMP_FILE)
-            logger.info("Cleanup logo_tmp completato.")
+            os.remove(logo_tmp_file)
         except Exception as e:
-            logger.warning(f"Cleanup fallito: {e}")
+            logger.warning(f"Cleanup logo_tmp fallito: {e}")
+
+# ============================================================
+# UPLOAD SUPABASE
+# ============================================================
+
+def upload_to_supabase():
+    import os
+    from supabase import create_client
+
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+
+    if not supabase_url or not supabase_key:
+        logger.warning("SUPABASE_URL o SUPABASE_KEY non configurati, upload saltato.")
+        return False
+
+    logger.info("Connessione a Supabase...")
+    client = create_client(supabase_url, supabase_key)
+
+    files = glob.glob(os.path.join(TEMP_DIR, "*.jpg"))
+
+    if not files:
+        logger.warning("Nessun file .jpg trovato in temp/ da uploadare.")
+        return False
+
+    errors = 0
+
+    for filepath in files:
+        filename = os.path.basename(filepath)
+        try:
+            with open(filepath, "rb") as f:
+                client.storage.from_("menu-images").upload(
+                    path=filename,
+                    file=f,
+                    file_options={"content-type": "image/jpeg", "upsert": "true"}
+                )
+            logger.info(f"Uploadato: {filename}")
+        except Exception as e:
+            logger.error(f"Errore upload {filename}: {e}")
+            errors += 1
+
+    if errors == 0:
+        logger.info(f"Tutti i {len(files)} file caricati su Supabase con successo.")
+        return True
+    else:
+        logger.error(f"Upload completato con {errors} errori su {len(files)} file.")
+        return False
+
+# ============================================================
+# PROCESS SINGLE MENU
+# ============================================================
+
+def process_menu(browser, menu):
+    menu_id = menu["id"]
+    url = menu["url"]
+    descrizione = menu["descrizione"]
+
+    output_file = os.path.join(TEMP_DIR, f"{menu_id}.jpg")
+    logo_tmp_file = os.path.join(TEMP_DIR, f"{menu_id}_logo_tmp.png")
+
+    page = browser.new_page(viewport=VIEWPORT)
+
+    try:
+        load_page(page, url)
+        inject_style(page)
+        target = get_target(page)
+        take_menu_screenshot(target, output_file)
+        capture_logo(page, logo_tmp_file)
+        compose_final_image(output_file, logo_tmp_file)
+
+        logger.info(f"Completato: {descrizione} → {output_file}")
+        return True
+
+    except PlaywrightTimeoutError:
+        logger.error(f"ho ottenuto un errore leggendo {descrizione} (timeout)")
+        return False
+
+    except Exception as e:
+        logger.error(f"ho ottenuto un errore leggendo {descrizione}: {e}")
+        return False
+
+    finally:
+        page.close()
+        cleanup_logo_tmp(logo_tmp_file)
 
 # ============================================================
 # MAIN
 # ============================================================
 
 def main():
-    try:
-        ensure_python_dependencies()
-        ensure_playwright()
+    ensure_python_dependencies()
+    ensure_playwright()
 
-        with sync_playwright() as p:
+    menus = load_menus()
 
-            browser = p.chromium.launch(
-                headless=True
-            )
+    # Crea cartella temp (ricrea se esiste già)
+    create_temp_dir()
 
-            page = browser.new_page(
-                viewport=VIEWPORT
-            )
+    errors = 0
+    successes = 0
 
-            load_page(page)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
 
-            inject_style(page)
+        for menu in menus:
+            ok = process_menu(browser, menu)
+            if ok:
+                successes += 1
+            else:
+                errors += 1
 
-            target = get_target(page)
+        browser.close()
 
-            take_menu_screenshot(target)
+    print(f"\nScreenshot: {successes} ok, {errors} errori su {len(menus)} totali.")
 
-            capture_logo(page)
-
-            compose_final_image()
-
-            browser.close()
-
-        cleanup()
-
-        print(f"Immagine salvata con successo: {OUTPUT_FILE}")
-
-    except PlaywrightTimeoutError as e:
-        logger.error("Timeout Playwright")
-        logger.error(str(e))
-        cleanup()
-        sys.exit(1)
-
-    except Exception as e:
-        logger.exception("Errore imprevisto")
-        cleanup()
-        sys.exit(1)
+    # Upload su Supabase e cleanup temp solo se tutto ok
+    if successes > 0:
+        upload_ok = upload_to_supabase()
+        if upload_ok:
+            cleanup_temp_dir()
+        else:
+            logger.warning("Cartella temp NON eliminata a causa di errori nell'upload.")
+    else:
+        logger.warning("Nessun file generato, upload saltato.")
 
 # ============================================================
 # ENTRYPOINT
