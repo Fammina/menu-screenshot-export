@@ -51,12 +51,6 @@ if not MENUS_FILE:
     logger.error("Variabile d'ambiente MENUS_FILE non configurata.")
     sys.exit(1)
 
-SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET")
-
-if not SUPABASE_BUCKET:
-    logger.error("Variabile d'ambiente SUPABASE_BUCKET non configurata.")
-    sys.exit(1)
-
 TEMP_DIR = "temp"
 TARGET_SELECTOR = 'div.card.card-style[id^="voce-"]'
 LOGO_SELECTOR = "a.header-logo"
@@ -286,11 +280,11 @@ def upload_to_supabase(completed):
     import requests
 
     supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_jwt = os.environ.get("SUPABASE_JWT")
     edge_fn_url  = f"{supabase_url}/functions/v1/upload-menu"
 
-    if not supabase_url or not supabase_key:
-        logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
+    if not supabase_url or not supabase_jwt:
+        logger.error("SUPABASE_URL o SUPABASE_JWT non configurati.")
         sys.exit(1)
 
     if not completed:
@@ -298,7 +292,7 @@ def upload_to_supabase(completed):
         return False
 
     headers = {
-        "Authorization": f"Bearer {supabase_key}",
+        "Authorization": f"Bearer {supabase_jwt}",
     }
 
     errors = 0
