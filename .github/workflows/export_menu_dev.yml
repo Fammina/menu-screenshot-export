@@ -1,4 +1,4 @@
-name: Render Menu
+name: Export Menu - Dev
 
 on:
   workflow_dispatch:
@@ -42,6 +42,7 @@ jobs:
 
       - name: Esegui script
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL_DEV }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_DEV }}
+          MENUS_FILE: config/menus_dev.csv
         run: python menu_export.py

@@ -31,12 +31,27 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 from PIL import Image
 
 # ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+# ============================================================
 # CONFIG
 # ============================================================
 
-MENUS_FILE = "menus.csv"
-TEMP_DIR = "temp"
+MENUS_FILE = os.environ.get("MENUS_FILE")
 
+if not MENUS_FILE:
+    logger.error("Variabile d'ambiente MENUS_FILE non configurata.")
+    sys.exit(1)
+
+TEMP_DIR = "temp"
 TARGET_SELECTOR = 'div.card.card-style[id^="voce-"]'
 LOGO_SELECTOR = "a.header-logo"
 
@@ -55,17 +70,6 @@ TOP_SECTION_HEIGHT = 240
 LOGO_MAX_WIDTH_RATIO = 0.28
 
 BACKGROUND_COLOR = (245, 245, 245, 255)
-
-# ============================================================
-# LOGGING
-# ============================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
-
-logger = logging.getLogger(__name__)
 
 # ============================================================
 # DEPENDENCIES
@@ -278,6 +282,10 @@ def upload_to_supabase():
 
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
+
+    if not supabase_url or not supabase_key:
+        logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
+        sys.exit(1)
 
     if not supabase_url or not supabase_key:
         logger.warning("SUPABASE_URL o SUPABASE_KEY non configurati, upload saltato.")
