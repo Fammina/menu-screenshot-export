@@ -318,6 +318,7 @@ def upload_to_supabase(completed):
                 )
 
             body = response.json()
+            logger.info(f"Edge Function response [{response.status_code}]: {body}")
 
             if response.ok and body.get("success"):
                 logger.info(f"Uploadato via Edge Function: {filename} → {body.get('publicUrl')}")
