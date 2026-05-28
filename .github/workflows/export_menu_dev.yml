@@ -49,7 +49,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL_DEV }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_DEV }}
-          SUPABASE_JWT: ${{ secrets.SUPABASE_JWT_DEV }}
           MENUS_FILE: config/menus_dev.csv
           SUPABASE_BUCKET: menus
         run: python menu_export.py

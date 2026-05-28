@@ -280,25 +280,28 @@ def upload_to_supabase(completed):
     import requests
 
     supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_jwt = os.environ.get("SUPABASE_JWT")
-    edge_fn_url  = f"{supabase_url}/functions/v1/upload-menu"
+    supabase_key = os.environ.get("SUPABASE_KEY")
 
-    if not supabase_url or not supabase_jwt:
-        logger.error("SUPABASE_URL o SUPABASE_JWT non configurati.")
+    if not supabase_url or not supabase_key:
+        logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
         sys.exit(1)
 
     if not completed:
         logger.warning("Nessun file da uploadare.")
         return False
 
+    edge_fn_url = f"{supabase_url}/functions/v1/upload-menu"
+
     headers = {
-        "Authorization": f"Bearer {supabase_jwt}",
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
     }
 
     errors = 0
 
     for filepath, restaurant_id in completed:
         filename = os.path.basename(filepath)
+
         try:
             with open(filepath, "rb") as f:
                 response = requests.post(
@@ -311,25 +314,29 @@ def upload_to_supabase(completed):
                     },
                 )
 
-            body = response.json()
+            try:
+                body = response.json()
+            except Exception:
+                body = {"error": "Invalid JSON response"}
+
             logger.info(f"Edge Function response [{response.status_code}]: {body}")
 
             if response.ok and body.get("success"):
-                logger.info(f"Uploadato via Edge Function: {filename} → {body.get('publicUrl')}")
+                logger.info(f"Upload OK: {filename} → {body.get('publicUrl')}")
             else:
-                logger.error(f"Edge Function ha risposto con errore per {filename}: {body.get('error')}")
+                logger.error(f"Upload fallito per {filename}: {body}")
                 errors += 1
 
         except Exception as e:
-            logger.error(f"Errore chiamata Edge Function per {filename}: {e}")
+            logger.error(f"Errore upload {filename}: {e}")
             errors += 1
 
     if errors == 0:
         logger.info(f"Tutti i {len(completed)} file caricati con successo.")
         return True
-    else:
-        logger.error(f"Upload completato con {errors} errori su {len(completed)} file.")
-        return False
+
+    logger.error(f"Upload completato con {errors} errori.")
+    return False
 
 # ============================================================
 # PROCESS SINGLE MENU
