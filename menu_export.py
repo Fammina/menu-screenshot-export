@@ -51,12 +51,6 @@ if not MENUS_FILE:
     logger.error("Variabile d'ambiente MENUS_FILE non configurata.")
     sys.exit(1)
 
-SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET")
-
-if not SUPABASE_BUCKET:
-    logger.error("Variabile d'ambiente SUPABASE_BUCKET non configurata.")
-    sys.exit(1)
-
 TEMP_DIR = "temp"
 TARGET_SELECTOR = 'div.card.card-style[id^="voce-"]'
 LOGO_SELECTOR = "a.header-logo"
@@ -87,6 +81,7 @@ def ensure_python_dependencies():
     required = {
         "playwright": "playwright",
         "PIL": "pillow",
+        "requests": "requests",
     }
 
     missing = []
@@ -282,7 +277,7 @@ def cleanup_logo_tmp(logo_tmp_file):
 # ============================================================
 
 def upload_to_supabase(completed):
-    from supabase import create_client
+    import requests
 
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
@@ -291,35 +286,57 @@ def upload_to_supabase(completed):
         logger.error("SUPABASE_URL o SUPABASE_KEY non configurati.")
         sys.exit(1)
 
-    logger.info("Connessione a Supabase...")
-    client = create_client(supabase_url, supabase_key)
-
     if not completed:
         logger.warning("Nessun file da uploadare.")
         return False
 
+    edge_fn_url = f"{supabase_url}/functions/v1/upload-menu"
+
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+    }
+
     errors = 0
 
-    for filepath, folder in completed:
+    for filepath, restaurant_id in completed:
         filename = os.path.basename(filepath)
+
         try:
             with open(filepath, "rb") as f:
-                client.storage.from_(SUPABASE_BUCKET).upload(
-                    path=f"{folder}/{filename}",
-                    file=f,
-                    file_options={"content-type": "image/png", "upsert": "true"}
+                response = requests.post(
+                    edge_fn_url,
+                    headers=headers,
+                    files={"file": (filename, f, "image/png")},
+                    data={
+                        "restaurantId": restaurant_id,
+                        "menuType": "daily",
+                    },
                 )
-            logger.info(f"Uploadato: {filename}")
+
+            try:
+                body = response.json()
+            except Exception:
+                body = {"error": "Invalid JSON response"}
+
+            logger.info(f"Edge Function response [{response.status_code}]: {body}")
+
+            if response.ok and body.get("success"):
+                logger.info(f"Upload OK: {filename} → {body.get('publicUrl')}")
+            else:
+                logger.error(f"Upload fallito per {filename}: {body}")
+                errors += 1
+
         except Exception as e:
             logger.error(f"Errore upload {filename}: {e}")
             errors += 1
 
     if errors == 0:
-        logger.info(f"Tutti i {len(completed)} file caricati su Supabase con successo.")
+        logger.info(f"Tutti i {len(completed)} file caricati con successo.")
         return True
-    else:
-        logger.error(f"Upload completato con {errors} errori su {len(completed)} file.")
-        return False
+
+    logger.error(f"Upload completato con {errors} errori.")
+    return False
 
 # ============================================================
 # PROCESS SINGLE MENU
