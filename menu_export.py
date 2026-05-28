@@ -281,8 +281,7 @@ def cleanup_logo_tmp(logo_tmp_file):
 # UPLOAD SUPABASE
 # ============================================================
 
-def upload_to_supabase():
-    import os
+def upload_to_supabase(completed):
     from supabase import create_client
 
     supabase_url = os.environ.get("SUPABASE_URL")
@@ -295,20 +294,18 @@ def upload_to_supabase():
     logger.info("Connessione a Supabase...")
     client = create_client(supabase_url, supabase_key)
 
-    files = glob.glob(os.path.join(TEMP_DIR, "*.png"))
-
-    if not files:
-        logger.warning("Nessun file .png trovato in temp/ da uploadare.")
+    if not completed:
+        logger.warning("Nessun file da uploadare.")
         return False
 
     errors = 0
 
-    for filepath in files:
+    for filepath, folder in completed:
         filename = os.path.basename(filepath)
         try:
             with open(filepath, "rb") as f:
                 client.storage.from_(SUPABASE_BUCKET).upload(
-                    path=f"{os.path.splitext(filename)[0]}/{filename}",
+                    path=f"{folder}/{filename}",
                     file=f,
                     file_options={"content-type": "image/png", "upsert": "true"}
                 )
@@ -318,10 +315,10 @@ def upload_to_supabase():
             errors += 1
 
     if errors == 0:
-        logger.info(f"Tutti i {len(files)} file caricati su Supabase con successo.")
+        logger.info(f"Tutti i {len(completed)} file caricati su Supabase con successo.")
         return True
     else:
-        logger.error(f"Upload completato con {errors} errori su {len(files)} file.")
+        logger.error(f"Upload completato con {errors} errori su {len(completed)} file.")
         return False
 
 # ============================================================
@@ -335,7 +332,9 @@ def process_menu(browser, menu):
 
     logger.info(f"Inizio elaborazione: {descrizione}")
 
-    output_file = os.path.join(TEMP_DIR, f"{menu_id}.png")
+    timestamp = int(time.time() * 1000)
+    output_folder = menu_id
+    output_file = os.path.join(TEMP_DIR, f"{menu_id}_{timestamp}.png")
     logo_tmp_file = os.path.join(TEMP_DIR, f"{menu_id}_logo_tmp.png")
 
     page = browser.new_page(viewport=VIEWPORT)
@@ -349,15 +348,20 @@ def process_menu(browser, menu):
         compose_final_image(output_file, logo_tmp_file)
 
         logger.info(f"Completato: {descrizione} → {output_file}")
-        return True
+
+        return {
+            "ok": True,
+            "file": output_file,
+            "folder": output_folder,
+        }
 
     except PlaywrightTimeoutError:
         logger.error(f"ho ottenuto un errore leggendo {descrizione} (timeout)")
-        return False
+        return {"ok": False}
 
     except Exception as e:
         logger.error(f"ho ottenuto un errore leggendo {descrizione}: {e}")
-        return False
+        return {"ok": False}
 
     finally:
         page.close()
@@ -378,14 +382,16 @@ def main():
 
     errors = 0
     successes = 0
+    completed = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
 
         for menu in menus:
-            ok = process_menu(browser, menu)
-            if ok:
+            result = process_menu(browser, menu)
+            if result["ok"]:
                 successes += 1
+                completed.append((result["file"], result["folder"]))
             else:
                 errors += 1
 
@@ -395,7 +401,7 @@ def main():
 
     # Upload su Supabase e cleanup temp solo se tutto ok
     if successes > 0:
-        upload_ok = upload_to_supabase()
+        upload_ok = upload_to_supabase(completed)
         if upload_ok:
             cleanup_temp_dir()
         else:
