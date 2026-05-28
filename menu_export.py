@@ -51,6 +51,12 @@ if not MENUS_FILE:
     logger.error("Variabile d'ambiente MENUS_FILE non configurata.")
     sys.exit(1)
 
+SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET")
+
+if not SUPABASE_BUCKET:
+    logger.error("Variabile d'ambiente SUPABASE_BUCKET non configurata.")
+    sys.exit(1)
+
 TEMP_DIR = "temp"
 TARGET_SELECTOR = 'div.card.card-style[id^="voce-"]'
 LOGO_SELECTOR = "a.header-logo"
@@ -306,7 +312,7 @@ def upload_to_supabase():
         filename = os.path.basename(filepath)
         try:
             with open(filepath, "rb") as f:
-                client.storage.from_("menu-images").upload(
+                client.storage.from_(SUPABASE_BUCKET).upload(
                     path=filename,
                     file=f,
                     file_options={"content-type": "image/jpeg", "upsert": "true"}
@@ -331,6 +337,8 @@ def process_menu(browser, menu):
     menu_id = menu["id"]
     url = menu["url"]
     descrizione = menu["descrizione"]
+
+    logger.info(f"Inizio elaborazione: {descrizione}")
 
     output_file = os.path.join(TEMP_DIR, f"{menu_id}.jpg")
     logo_tmp_file = os.path.join(TEMP_DIR, f"{menu_id}_logo_tmp.png")

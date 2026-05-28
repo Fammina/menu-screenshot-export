@@ -1,9 +1,12 @@
-name: Export Menu - Prod
+name: Render Menu
 
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 8 * * *'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   render:
@@ -11,15 +14,15 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -27,7 +30,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
@@ -37,12 +40,17 @@ jobs:
       - name: Installa dipendenze Python
         run: pip install -r requirements.txt
 
+      - name: Installa dipendenze sistema Playwright
+        run: playwright install-deps chromium
+
       - name: Installa Playwright + Chromium
-        run: playwright install chromium --with-deps
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: playwright install chromium
 
       - name: Esegui script
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL_PROD }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_PROD }}
-          MENUS_FILE: config/menus_prod.csv
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL_DEV }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_DEV }}
+          MENUS_FILE: config/menus_dev.csv
+          SUPABASE_BUCKET: menus
         run: python menu_export.py
