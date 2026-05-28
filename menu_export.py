@@ -294,6 +294,7 @@ def upload_to_supabase(completed):
 
     headers = {
         "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
     }
 
     errors = 0
