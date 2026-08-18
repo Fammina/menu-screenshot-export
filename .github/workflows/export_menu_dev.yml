@@ -1,6 +1,8 @@
 name: Render Menu - Dev
 
 on:
+  workflow_dispatch:
+  
   schedule:
     # Ogni 30 minuti dalle 09:00 alle 12:00 UTC
     # Inverno (UTC+1): 10:00 - 13:00 ora italiana
