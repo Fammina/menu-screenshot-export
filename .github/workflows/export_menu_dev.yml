@@ -1,5 +1,12 @@
 name: Render Menu - Dev
 
+on:
+  schedule:
+    # Ogni 30 minuti dalle 09:00 alle 12:00 UTC
+    # Inverno (UTC+1): 10:00 - 13:00 ora italiana
+    # Estate (UTC+2): 11:00 - 14:00 ora italiana
+    - cron: '0,30 9,10,11 * * *'
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
